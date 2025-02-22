@@ -1,112 +1,111 @@
-# Uterine-cancer-Detection
-This system uses ML and IoT for early uterine cancer detection. Biochemical sensors track estrogen &amp; progesterone levels, sending data via ESP8266/Raspberry Pi to the cloud. ML models analyze risks, triggering alerts for monitoring, prevention, and intervention.
-
-//python code for analysis
-import requests
+import os
+import fitz  # PyMuPDF for PDF processing
+import pdfplumber
+import pytesseract  # OCR for image extraction
+import cv2  # OpenCV for image processing
 import pandas as pd
-import PyPDF2
-import pytesseract
-from PIL import Image
-import io
-from google.colab import files
-
-# Upload Document
-uploaded = files.upload()
-
-# Function to extract text from PDFs
-def extract_text_from_pdf(pdf_file):
-    text = ""
-    pdf_reader = PyPDF2.PdfReader(pdf_file)
-    for page in pdf_reader.pages:
-        text += page.extract_text() + "\n"
-    return text
-
-# Function to extract text from images
-def extract_text_from_image(image_file):
-    image = Image.open(image_file)
-    text = pytesseract.image_to_string(image)
-    return text
-
-# Process Uploaded Files
-document_text = ""
-for file_name in uploaded.keys():
-    if file_name.endswith(".pdf"):
-        with open(file_name, "rb") as pdf_file:
-            document_text += extract_text_from_pdf(pdf_file)
-    elif file_name.endswith((".jpg", ".png", ".jpeg")):
-        document_text += extract_text_from_image(file_name)
-    elif file_name.endswith(".txt"):
-        with open(file_name, "r", encoding="utf-8") as txt_file:
-            document_text += txt_file.read()
-
-# Display Extracted Text
-print("\nExtracted Text from Document:\n")
-print(document_text[:1000])  # Show only first 1000 characters
-
-# Simple Analysis (Extracting Hormone Values)
+import spacy
+import numpy as np
 import re
-def extract_hormone_levels(text):
-    hormones = {}
-    patterns = {
-        "Estrogen": r"Estrogen[:\s]*([\d\.]+)",
-        "Progesterone": r"Progesterone[:\s]*([\d\.]+)",
-        "Insulin": r"Insulin[:\s]*([\d\.]+)",
-        "IGF-1": r"IGF-1[:\s]*([\d\.]+)"
-    }
-    for hormone, pattern in patterns.items():
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            hormones[hormone] = float(match.group(1))
-    return hormones
+from flask import Flask, request, render_template
+from werkzeug.utils import secure_filename
 
-extracted_hormones = extract_hormone_levels(document_text)
-print("\nExtracted Hormone Levels from Document:")
-print(extracted_hormones)
+# Load NLP model
+nlp = spacy.load("en_core_web_sm")
 
-# Fetch Real-Time Data from ThingSpeak
-THINGSPEAK_CHANNEL_ID = "YOUR_CHANNEL_ID"
-THINGSPEAK_READ_API = "YOUR_READ_API_KEY"
-URL = f"https://api.thingspeak.com/channels/{THINGSPEAK_CHANNEL_ID}/feeds.json?api_key={THINGSPEAK_READ_API}&results=1"
+# Initialize Flask app
+app = Flask(__name__)
+UPLOAD_FOLDER = "uploads"
+ALLOWED_EXTENSIONS = {"pdf", "jpeg", "jpg", "png"}
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-response = requests.get(URL)
-data = response.json()
-feeds = data['feeds'][0]
+# Define cancer stages based on symptoms
+STAGE_1 = {"abnormal bleeding", "unusual discharge"}
+STAGE_2 = {"pelvic pain", "pain during intercourse"}
+STAGE_3 = {"weight loss", "fatigue"}
+STAGE_4 = {"urinary urgency", "severe pelvic pain"}
 
-# Parse IoT Data
-iot_data = {
-    "Estrogen": float(feeds["field1"]),
-    "Progesterone": float(feeds["field2"]),
-    "Insulin": float(feeds["field3"]),
-    "IGF-1": float(feeds["field4"])
+# Medical keywords to validate documents
+MEDICAL_KEYWORDS = {"patient", "diagnosis", "doctor", "hospital", "test", "report", "hormone", "estrogen", "progesterone"}
+
+# Define home remedies
+HOME_REMEDIES = {
+    "Stage 1 - Early Detection": ["Drink green tea", "Use turmeric", "Eat leafy greens"],
+    "Stage 2 - Moderate Risk": ["Eat cruciferous vegetables", "Practice yoga", "Drink pomegranate juice"],
+    "Stage 3 - Late Stage": ["Increase Omega-3 intake", "Use ginger & garlic", "Take vitamin C"],
+    "Stage 4 - Advanced Cancer": ["Follow an anti-inflammatory diet", "Take Ashwagandha", "Stay hydrated"],
+    "No signs of cancer detected.": ["Maintain a healthy diet", "Exercise regularly", "Practice meditation"]
 }
 
-print("\nReal-Time Sensor Data from ThingSpeak:")
-print(iot_data)
+# Check if file is allowed
+def allowed_file(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# Combine Document & IoT Data for Risk Analysis
-def analyze_risk(document_data, iot_data):
-    risk_factors = []
-    
-    estrogen = document_data.get("Estrogen", iot_data["Estrogen"])
-    progesterone = document_data.get("Progesterone", iot_data["Progesterone"])
-    insulin = document_data.get("Insulin", iot_data["Insulin"])
-    igf1 = document_data.get("IGF-1", iot_data["IGF-1"])
+# Extract text from PDFs
+def extract_text_from_pdf(pdf_path):
+    doc = fitz.open(pdf_path)
+    text = "\n".join([page.get_text("text") for page in doc])
+    return text
 
-    if estrogen > 100 and progesterone < 5:
-        risk_factors.append("⚠️ High Estrogen & Low Progesterone (Potential Cancer Risk)")
-    if insulin > 20:
-        risk_factors.append("⚠️ High Insulin (Risk of Metabolic Disorders)")
-    if igf1 > 250:
-        risk_factors.append("⚠️ High IGF-1 (Risk of Tumor Growth)")
+# Extract text from images using OCR
+def extract_text_from_image(image_path):
+    image = cv2.imread(image_path)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)  # Convert to grayscale
+    text = pytesseract.image_to_string(gray)  # OCR to extract text
+    return text
 
-    return risk_factors
+# Validate if a document is medical-related
+def is_medical_document(text):
+    words = set(re.findall(r"\b\w+\b", text.lower()))
+    return bool(words & MEDICAL_KEYWORDS)
 
-risk_analysis = analyze_risk(extracted_hormones, iot_data)
+# Analyze symptoms and determine cancer stage
+def analyze_text(text):
+    doc = nlp(text)
+    medical_terms = {ent.text.lower() for ent in doc.ents}
+    detected_symptoms = (STAGE_1 | STAGE_2 | STAGE_3 | STAGE_4) & medical_terms
 
-print("\n⚠️ Risk Analysis:")
-if risk_analysis:
-    for risk in risk_analysis:
-        print(risk)
-else:
-    print("✅ No significant hormonal imbalance detected.")
+    if detected_symptoms.intersection(STAGE_4):
+        stage = "Stage 4 - Advanced Cancer"
+    elif detected_symptoms.intersection(STAGE_3):
+        stage = "Stage 3 - Late Stage"
+    elif detected_symptoms.intersection(STAGE_2):
+        stage = "Stage 2 - Moderate Risk"
+    elif detected_symptoms.intersection(STAGE_1):
+        stage = "Stage 1 - Early Detection"
+    else:
+        stage = "No signs of cancer detected."
 
+    remedies = HOME_REMEDIES.get(stage, [])
+    return detected_symptoms, stage, remedies
+
+@app.route("/", methods=["GET", "POST"])
+def upload_file():
+    detected_symptoms, cancer_stage, remedies, error_message = None, None, [], None
+
+    if request.method == "POST":
+        file = request.files["file"]
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+            file.save(filepath)
+
+            if filename.endswith(".pdf"):
+                text = extract_text_from_pdf(filepath)
+
+            elif filename.endswith((".jpeg", ".jpg", ".png")):
+                text = extract_text_from_image(filepath)
+
+            else:
+                text = ""
+
+            if not is_medical_document(text):
+                error_message = "This file does not appear to be related to medical reports."
+            else:
+                detected_symptoms, cancer_stage, remedies = analyze_text(text)
+
+    return render_template("index.html", symptoms=detected_symptoms, cancer_stage=cancer_stage, remedies=remedies, error_message=error_message)
+
+if __name__ == "__main__":
+    app.run(debug=True)
