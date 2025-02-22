@@ -105,7 +105,7 @@ def upload_file():
             else:
                 detected_symptoms, cancer_stage, remedies = analyze_text(text)
 
-    return render_template("index.html", symptoms=detected_symptoms, cancer_stage=cancer_stage, remedies=remedies, error_message=error_message)
+    return render_template("result.html", symptoms=detected_symptoms, cancer_stage=cancer_stage, remedies=remedies, error_message=error_message)
 
 if __name__ == "__main__":
     app.run(debug=True)
