@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cancer Detection & Remedies</title>
+    <style>
+        /* General Styles */
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: #f4f7fc;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            flex-direction: column;
+        }
+
+        /* Container */
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+            transition: 0.3s ease-in-out;
+        }
+
+        .container:hover {
+            transform: scale(1.02);
+        }
+
+        /* Heading */
+        h1 {
+            font-size: 22px;
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        /* File Upload */
+        .upload-box {
+            border: 2px dashed #3498db;
+            padding: 20px;
+            cursor: pointer;
+            border-radius: 8px;
+            background: #f0f8ff;
+            transition: 0.3s;
+            margin-bottom: 15px;
+        }
+
+        .upload-box:hover {
+            background: #d6eaff;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        /* Button */
+        .btn {
+            background: #3498db;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .btn:hover {
+            background: #217dbb;
+        }
+
+        /* Results */
+        .result-box {
+            margin-top: 20px;
+            text-align: left;
+        }
+
+        .result-box p {
+            font-size: 16px;
+            color: #333;
+            background: #ecf0f1;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        .remedies {
+            background: #d5f5e3;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Upload Your Medical Report</h1>
+    <form action="/" method="POST" enctype="multipart/form-data">
+        <label class="upload-box">
+            Click or Drag & Drop your file here
+            <input type="file" name="file" accept=".jpg, .jpeg, .pdf">
+        </label>
+        <br>
+        <button type="submit" class="btn">Analyze Report</button>
+    </form>
+
+    {% if cancer_stage %}
+    <div class="result-box">
+        <p><strong>Predicted Cancer Stage:</strong> {{ cancer_stage }}</p>
+        <p><strong>Estrogen Level:</strong> {{ estrogen_level }}</p>
+        <p><strong>Progesterone Level:</strong> {{ progesterone_level }}</p>
+        
+        {% if remedies %}
+        <div class="remedies">
+            <strong>Home Remedies:</strong>
+            <ul>
+                {% for remedy in remedies %}
+                <li>{{ remedy }}</li>
+                {% endfor %}
+            </ul>
+       
